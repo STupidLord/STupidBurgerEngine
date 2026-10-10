@@ -77,7 +77,7 @@ public sealed unsafe class MapRenderer : IDisposable
 
     private void BuildTerrainMesh()
     {
-        int maxDim = Math.Max(_map.Width, _map.Height) > 4096 ? 1024 : 512; // big maps (Earth) get a finer terrain mesh
+        int maxDim = Math.Max(_map.Width, _map.Height) > 4096 ? 1024 : 512; // big maps (Earth) get a finer height/picking field
         float aspect = _map.Width / (float)_map.Height;
         _hw = aspect >= 1 ? Math.Min(maxDim, _map.Width) : Math.Max(2, (int)(Math.Min(maxDim, _map.Height) * aspect));
         _hh = aspect >= 1 ? Math.Max(2, (int)(_hw / aspect)) : Math.Min(maxDim, _map.Height);
@@ -125,7 +125,27 @@ public sealed unsafe class MapRenderer : IDisposable
             px[i * 4] = px[i * 4 + 1] = px[i * 4 + 2] = smooth[i];
             _heights[i] = smooth[i] / 255f * s.HeightScale;
         }
-        _terrainMesh = Raylib.GenMeshHeightmap(img, new Vector3(WorldWidth, s.HeightScale, WorldHeight));
+        // Keep the high-resolution height field for position queries and picking. Only the
+        // presentation mesh uses fewer vertices on very large maps; map-data texture stays full-res.
+        // Use a denser presentation mesh so relief is not visibly faceted. The
+        // height/picking field above remains independent of this render mesh.
+        int meshMaxDim = Math.Max(_map.Width, _map.Height) > 4096 ? 1024 : Math.Max(1024, maxDim);
+        float meshScale = Math.Min(1f, meshMaxDim / (float)Math.Max(_hw, _hh));
+        int meshW = Math.Max(2, (int)(_hw * meshScale)), meshH = Math.Max(2, (int)(_hh * meshScale));
+        Image meshImg = Raylib.GenImageColor(meshW, meshH, Color.Black);
+        byte* meshPx = (byte*)meshImg.Data;
+        for (int y = 0; y < meshH; y++)
+            for (int x = 0; x < meshW; x++)
+            {
+                int sx = meshW == 1 ? 0 : (int)(x * (_hw - 1f) / (meshW - 1));
+                int sy = meshH == 1 ? 0 : (int)(y * (_hh - 1f) / (meshH - 1));
+                byte h = smooth[sy * _hw + sx];
+                int o = (y * meshW + x) * 4;
+                meshPx[o] = meshPx[o + 1] = meshPx[o + 2] = h;
+                meshPx[o + 3] = 255;
+            }
+        _terrainMesh = Raylib.GenMeshHeightmap(meshImg, new Vector3(WorldWidth, s.HeightScale, WorldHeight));
+        Raylib.UnloadImage(meshImg);
         Raylib.UnloadImage(img);
     }
 
@@ -545,4 +565,3 @@ public sealed unsafe class MapRenderer : IDisposable
         if (_hasTrees) Raylib.UnloadMesh(_treeMesh);
     }
 }
-

@@ -12,7 +12,7 @@ public sealed partial class Hud
 {
     private enum MenuIcon { Military, Recruit, Characters, Decisions, Production, Designer, Navy, Air }
 
-    private float LeftMenuW => 66 * S;
+    private float LeftMenuW => 78 * S;
 
     /// <summary>Card background for list rows inside panels.</summary>
     private void Card(Rectangle r, Color bg, bool highlight = false)
@@ -68,9 +68,9 @@ public sealed partial class Hud
             var col = it.Active ? Color.White : hover ? Gui.Gold : Gui.Text;
             if (it.Icon != null) DrawMenuIcon(it.Icon.Value, iconArea, col);
             else DrawPanelIcon(it.Panel!, iconArea, col);
-            string label = Gui.Fit(it.Label, r.Width - 4 * S, 11, FontKind.Bold);
-            var m = Gui.Measure(label, 11, FontKind.Bold);
-            Gui.Label(label, r.X + (r.Width - m.X) / 2, r.Y + r.Height - m.Y - 3 * S, 11, col, FontKind.Bold);
+            string label = Gui.Fit(it.Label, r.Width - 4 * S, 12, FontKind.Bold);
+            var m = Gui.Measure(label, 12, FontKind.Bold);
+            Gui.Label(label, r.X + (r.Width - m.X) / 2, r.Y + r.Height - m.Y - 3 * S, 12, col, FontKind.Bold);
             if (it.Badge > 0) Badge(new Vector2(r.X + r.Width - 3 * S, r.Y + 4 * S), it.Badge.ToString(), it.Icon == MenuIcon.Decisions ? new Color(60, 150, 60, 255) : Gui.Accent);
             if (hover) Gui.Tooltip(it.Tip);
             Gui.Block(r);
