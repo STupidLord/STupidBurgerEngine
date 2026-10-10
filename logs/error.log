@@ -1,0 +1,36 @@
+BurgerEngine log - 10/9/2026 8:25:23 PM
+[20:25:25] INFO: Loaded 16 C# script(s) (including the backend)
+[20:25:25] INFO: Province map 2048x1024
+[20:25:25] INFO: Map loaded: 251 locations, 717 borders
+[20:25:25] INFO: Game 'The Isle of Kings' loaded in 1477 ms
+[20:25:28] INFO: PERF fps 28.3, frame 35.3 ms, simulation 0.0 ms/frame, 220426.5 days/s
+[20:25:31] INFO: PERF fps 22.6, frame 44.3 ms, simulation 0.0 ms/frame, 0.0 days/s
+[20:25:34] INFO: PERF fps 21.5, frame 46.6 ms, simulation 1.7 ms/frame, 70.0 days/s
+[20:25:37] INFO: PERF fps 22.1, frame 45.2 ms, simulation 0.0 ms/frame, 0.0 days/s
+[20:25:40] INFO: PERF fps 22.2, frame 45.0 ms, simulation 0.0 ms/frame, 0.0 days/s
+[20:25:43] INFO: PERF fps 21.7, frame 46.0 ms, simulation 0.0 ms/frame, 0.0 days/s
+[20:25:46] INFO: PERF fps 21.3, frame 47.0 ms, simulation 0.0 ms/frame, 0.0 days/s
+[20:25:49] INFO: PERF fps 22.2, frame 45.1 ms, simulation 0.0 ms/frame, 0.0 days/s
+[20:25:52] INFO: PERF fps 22.1, frame 45.2 ms, simulation 0.0 ms/frame, 0.0 days/s
+[20:25:55] INFO: PERF fps 21.3, frame 46.9 ms, simulation 0.0 ms/frame, 0.0 days/s
+[20:25:58] INFO: PERF fps 22.3, frame 44.9 ms, simulation 0.0 ms/frame, 0.0 days/s
+[20:26:01] INFO: PERF fps 22.1, frame 45.3 ms, simulation 0.0 ms/frame, 0.0 days/s
+[20:26:04] INFO: PERF fps 22.1, frame 45.3 ms, simulation 0.0 ms/frame, 0.0 days/s
+[20:26:07] INFO: PERF fps 21.6, frame 46.2 ms, simulation 0.0 ms/frame, 0.0 days/s
+[20:26:10] INFO: PERF fps 21.9, frame 45.6 ms, simulation 0.0 ms/frame, 0.0 days/s
+[20:26:13] INFO: PERF fps 21.4, frame 46.8 ms, simulation 0.0 ms/frame, 0.0 days/s
+[20:26:16] INFO: PERF fps 21.5, frame 46.5 ms, simulation 0.0 ms/frame, 0.0 days/s
+[20:26:19] INFO: PERF fps 21.6, frame 46.4 ms, simulation 0.0 ms/frame, 0.0 days/s
+[20:26:22] INFO: PERF fps 21.6, frame 46.2 ms, simulation 0.0 ms/frame, 0.0 days/s
+[20:26:25] INFO: PERF fps 21.1, frame 47.3 ms, simulation 0.0 ms/frame, 0.0 days/s
+[20:26:28] INFO: PERF fps 21.5, frame 46.5 ms, simulation 0.0 ms/frame, 0.0 days/s
+[20:26:31] INFO: PERF fps 21.8, frame 46.0 ms, simulation 0.8 ms/frame, 10.2 days/s
+[20:26:34] INFO: PERF fps 23.2, frame 43.2 ms, simulation 0.1 ms/frame, 0.3 days/s
+[20:26:37] INFO: PERF fps 26.2, frame 38.1 ms, simulation 0.0 ms/frame, 0.7 days/s
+[20:26:40] INFO: PERF fps 35.3, frame 28.4 ms, simulation 0.0 ms/frame, 0.3 days/s
+[20:26:43] INFO: PERF fps 31.0, frame 32.3 ms, simulation 0.0 ms/frame, 0.7 days/s
+[20:26:46] INFO: PERF fps 31.2, frame 32.1 ms, simulation 0.0 ms/frame, 0.3 days/s
+[20:26:49] INFO: PERF fps 30.9, frame 32.3 ms, simulation 0.0 ms/frame, 0.7 days/s
+[20:26:52] INFO: PERF fps 30.9, frame 32.3 ms, simulation 0.0 ms/frame, 0.3 days/s
+[20:26:55] INFO: PERF fps 30.7, frame 32.6 ms, simulation 0.0 ms/frame, 0.0 days/s
+[20:26:58] INFO: PERF fps 30.8, frame 32.5 ms, simulation 0.0 ms/frame, 0.0 days/s
