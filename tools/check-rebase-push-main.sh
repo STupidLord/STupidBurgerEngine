@@ -19,10 +19,6 @@ confirm() {
   [[ "$answer" =~ ^([yY]|[yY][eE][sS])$ ]]
 }
 
-for command in git dotnet; do
-  command -v "$command" >/dev/null 2>&1 || fail "Missing required command: $command"
-done
-
 ROOT=$(git rev-parse --show-toplevel 2>/dev/null) || fail 'Run this inside the repository.'
 cd "$ROOT"
 BRANCH=$(git branch --show-current)
@@ -34,8 +30,13 @@ printf 'Current branch: %s\nTarget: %s/%s\n' "$BRANCH" "$REMOTE" "$TARGET"
 git status --short
 [[ -n "$(git status --porcelain --untracked-files=all)" ]] || fail 'No changes found to commit.'
 
-printf '\nRunning validation:\n  %s\n' "$CHECK_CMD"
-bash -lc "$CHECK_CMD" || fail 'Validation failed; no commit, rebase, or push was attempted.'
+if [[ -n "$CHECK_CMD" ]]; then
+  command -v dotnet >/dev/null 2>&1 || fail 'Missing required command: dotnet'
+  printf '\nRunning validation:\n  %s\n' "$CHECK_CMD"
+  bash -lc "$CHECK_CMD" || fail 'Validation failed; no commit, rebase, or push was attempted.'
+else
+  printf '\nValidation skipped because CHECK_CMD is empty.\n'
+fi
 
 printf '\nAll changes will be staged:\n'
 git diff --stat
@@ -55,4 +56,8 @@ printf '\nCommits to push to %s/%s:\n' "$REMOTE" "$TARGET"
 git log --oneline --decorate "$REMOTE/$TARGET..HEAD"
 confirm "Push these commits directly to $REMOTE/$TARGET?" || { printf 'Cancelled after rebase; branch remains rebased.\n'; exit 0; }
 git push "$REMOTE" "HEAD:$TARGET"
-printf 'SUCCESS: changes pushed to %s/%s.\n' "$REMOTE" "$TARGET"
+git fetch "$REMOTE" "$TARGET"
+git switch "$TARGET"
+git pull --ff-only "$REMOTE" "$TARGET"
+git branch -D "$BRANCH"
+printf 'SUCCESS: changes pushed to %s/%s; switched to %s and deleted branch %s.\n' "$REMOTE" "$TARGET" "$TARGET" "$BRANCH"

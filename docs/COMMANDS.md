@@ -149,7 +149,7 @@ To validate, commit, rebase onto `origin/main`, and push directly to the remote 
 tools/check-rebase-push-main.sh "Describe the change"
 ```
 
-The script runs `./burger.sh validate SampleGame --days 60`, displays the pending changes, asks for confirmation before staging and rebasing, asks again before pushing, and refuses to run from `main`. Override the validation command when needed with `CHECK_CMD='...' tools/check-rebase-push-main.sh "message"`. It uses `git add -A`, so all tracked and untracked changes are included; inspect the displayed status carefully.
+The script runs `./burger.sh validate SampleGame --days 60`, displays the pending changes, asks for confirmation before staging and rebasing, asks again before pushing, and refuses to run from `main`. After a successful push, it fast-forwards and selects local `main`, then deletes the original change branch. Override the validation command when needed with `CHECK_CMD='...' tools/check-rebase-push-main.sh "message"`. It uses `git add -A`, so all tracked and untracked changes are included; inspect the displayed status carefully.
 
 ## Output locations
 
