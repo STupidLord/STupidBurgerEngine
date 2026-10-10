@@ -30,6 +30,14 @@ You build a game out of **images and plain-text files**. Export turns it into a 
 
 All of these also work from the command line, as `burger help`, `burger run SampleGame`, `burger export MyGame` and so on.
 
+## Quick start (Arch Linux)
+
+Install the existing prerequisites: `dotnet-sdk` (8 or newer), `mesa`, and an X11 or Wayland session. Raylib-cs 7.0.2 supplies the managed binding and its Linux native assets; the engine does not require a native port. Run `./burger.sh list` for CLI commands, `./BurgerStudio.sh` for the editor, or `./BurgerEngine.sh run SampleGame` to start the sample. The first run needs NuGet access to restore packages. Linux graphics require a working OpenGL-capable desktop session; headless startup is not supported.
+
+The Bash launchers build the unchanged .NET 8 projects in Release mode and resolve paths relative to the repository. Windows launchers remain available as `.bat` files. Linux export was not treated as a compatibility requirement and remains separately unverified.
+
+By default, runtime diagnostics and `--perf` output are written to `logs/error.log` in the repository workspace. Use `--log-dir <folder>` with the game executable to select another location.
+
 ## In-game controls
 
 | Key | Action |
@@ -177,4 +185,3 @@ diplomacy feature). It is made from public-domain Natural Earth data and free el
 `tools/earth/make_earth.py`; the 1930 world itself (who owned what, capitals, colors, flags) is in
 `tools/earth/earth1930_data.py`, so another start date is a matter of editing that file and running the generator
 (see `tools/earth/README.txt`). Sources are listed in `game/map/SOURCES.txt`.
-

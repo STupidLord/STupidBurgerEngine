@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Numerics;
 using Burger.Core;
 using Burger.Core.Model;
@@ -14,7 +15,6 @@ public sealed class CountryLabels
 {
     private sealed class Label
     {
-        public Country Country = null!;
         public string Text = "";
         public Vector2[] Points = Array.Empty<Vector2>(); // curve in map pixels, left to right
         public float FontPx;                              // letter height in map pixels
@@ -23,39 +23,136 @@ public sealed class CountryLabels
         public float Coverage = 1;                        // share of the land's length the name runs along
     }
 
+    private sealed record LocationInput(int Index, int OwnerIndex, bool IsWater, int PixelCount,
+        float CenterX, float CenterY, int MinX, int MinY, int MaxX, int MaxY, int[] LandNeighbors);
+    private sealed record CountryInput(int Index, string Name, int CapitalIndex);
+    private sealed record BuildInput(int Version, int Width, int Height, int[] PixelLocation,
+        LocationInput[] Locations, Dictionary<int, CountryInput> CountryByIndex);
+    private sealed record BuildResult(int Version, Label[] Labels);
+
+    private const double BuildDebounceSeconds = 0.4;
+    private const double MinBuildIntervalSeconds = 3.0;
     private readonly Game _game;
     private readonly MapRenderer _map;
     private readonly List<Label> _labels = new();
     private bool _dirty = true;
-    private double _lastBuild = -10;
+    private int _version;
+    private long _lastInvalidationTicks = Stopwatch.GetTimestamp();
+    private double _lastBuildStartedAt = double.NegativeInfinity;
+    private Task<BuildResult>? _buildTask;
 
     public CountryLabels(Game game, MapRenderer map)
     {
         _game = game;
         _map = map;
-        game.MapChanged += () => _dirty = true;
+        game.MapChanged += MarkDirty;
     }
 
-    public void MarkDirty() => _dirty = true;
-
-    // ------------------------------------------------------------------------------------- building
-    private void Rebuild()
+    public void MarkDirty()
     {
-        _labels.Clear();
-        var w = _game.World;
-        var md = w.Map;
-        int n = w.Locations.Count;
+        _version++;
+        _dirty = true;
+        _lastInvalidationTicks = Stopwatch.GetTimestamp();
+    }
+
+    // ------------------------------------------------------------------------------------- immutable snapshot + background layout
+    private BuildInput CaptureInput(int version)
+    {
+        var world = _game.World;
+        var map = world.Map;
+        var locations = new LocationInput[world.Locations.Count];
+        foreach (var l in world.Locations)
+        {
+            // Adjacency and province geometry do not change after map load; only owner/name/capital
+            // state is copied here. PixelLocation is likewise immutable after MapLoader finishes.
+            int[] landNeighbors = l.Neighbors.Where(a => a.Kind != AdjacencyKind.Sea).Select(a => a.To.Index).ToArray();
+            locations[l.Index] = new LocationInput(l.Index, l.Owner?.Index ?? -1, l.IsWater,
+                l.PixelCount, l.CenterX, l.CenterY, l.MinX, l.MinY, l.MaxX, l.MaxY, landNeighbors);
+        }
+        var countries = world.Countries.Where(c => c.Exists)
+            .Select(c => new CountryInput(c.Index, c.Name, c.Capital?.Index ?? -1)).ToArray();
+        return new BuildInput(version, map.Width, map.Height, map.PixelLocation, locations,
+            countries.ToDictionary(c => c.Index));
+    }
+
+    private void RefreshLabels()
+    {
+        if (_buildTask is { IsCompleted: true } completed)
+        {
+            _buildTask = null;
+            try
+            {
+                var result = completed.GetAwaiter().GetResult();
+                ApplyHeights(result.Labels);
+                _labels.Clear();
+                _labels.AddRange(result.Labels);
+                // Publish the most recent completed snapshot even if newer map changes arrived while
+                // it was being built; retain it until a coalesced follow-up is ready.
+                _dirty = result.Version != _version;
+            }
+            catch (Exception ex)
+            {
+                _dirty = true;
+                _lastBuildStartedAt = Raylib.GetTime();
+                Log.Error($"Country-label layout failed: {ex.GetType().Name}: {ex.Message}");
+            }
+        }
+
+        if (!_dirty || _buildTask != null) return;
+        double now = Raylib.GetTime();
+        if (now - _lastBuildStartedAt < MinBuildIntervalSeconds ||
+            Stopwatch.GetElapsedTime(_lastInvalidationTicks).TotalSeconds < BuildDebounceSeconds) return;
+
+        BuildInput input;
+        try { input = CaptureInput(_version); }
+        catch (Exception ex)
+        {
+            _lastBuildStartedAt = now;
+            Log.Error($"Could not snapshot country labels: {ex.GetType().Name}: {ex.Message}");
+            return;
+        }
+        _lastBuildStartedAt = now;
+        _buildTask = Task.Run(() => new BuildResult(input.Version, BuildLabels(input)));
+    }
+
+    private void ApplyHeights(Label[] labels)
+    {
+        foreach (var label in labels)
+        {
+            int n = label.Points.Length;
+            var raw = new float[n];
+            for (int i = 0; i < n; i++) raw[i] = _map.WorldPos(label.Points[i].X, label.Points[i].Y).Y;
+            var heights = new float[n];
+            for (int i = 0; i < n; i++)
+            {
+                float sum = 0, weightSum = 0;
+                for (int j = Math.Max(0, i - 6); j <= Math.Min(n - 1, i + 6); j++)
+                {
+                    float weight = 7 - Math.Abs(i - j);
+                    sum += raw[j] * weight;
+                    weightSum += weight;
+                }
+                heights[i] = sum / weightSum + 0.02f;
+            }
+            label.Heights = heights;
+        }
+    }
+
+    // The expensive connected-region and shape-fitting work uses only this immutable input.
+    private static Label[] BuildLabels(BuildInput input)
+    {
+        int n = input.Locations.Length;
         var block = new int[n];
         Array.Fill(block, -1);
-        var blocks = new List<(Country Owner, List<Location> Locs, long Px)>();
-        foreach (var start in w.Locations)
+        var blocks = new List<(int OwnerIndex, List<LocationInput> Locs, long Px)>();
+        foreach (var start in input.Locations)
         {
-            var o = start.Owner;
-            if (o == null || start.IsWater || block[start.Index] >= 0) continue;
+            int owner = start.OwnerIndex;
+            if (owner < 0 || start.IsWater || block[start.Index] >= 0) continue;
             int id = blocks.Count;
-            var list = new List<Location>();
+            var list = new List<LocationInput>();
             long px = 0;
-            var q = new Queue<Location>();
+            var q = new Queue<LocationInput>();
             block[start.Index] = id;
             q.Enqueue(start);
             while (q.Count > 0)
@@ -63,21 +160,30 @@ public sealed class CountryLabels
                 var l = q.Dequeue();
                 list.Add(l);
                 px += l.PixelCount;
-                foreach (var a in l.Neighbors)
-                    if (a.Kind != AdjacencyKind.Sea && a.To.IsLand && a.To.Owner == o && block[a.To.Index] < 0) { block[a.To.Index] = id; q.Enqueue(a.To); }
+                foreach (int neighborIndex in l.LandNeighbors)
+                {
+                    var neighbor = input.Locations[neighborIndex];
+                    if (!neighbor.IsWater && neighbor.OwnerIndex == owner && block[neighborIndex] < 0)
+                    {
+                        block[neighborIndex] = id;
+                        q.Enqueue(neighbor);
+                    }
+                }
             }
-            blocks.Add((o, list, px));
+            blocks.Add((owner, list, px));
         }
-        // blocks of one country separated only by a narrow stretch of sea (Danish islands, Sicily, Japan...) share one name
+        var labels = new List<Label>();
+        if (blocks.Count == 0) return labels.ToArray();
+
+        // blocks of one country separated only by a narrow stretch of sea share one name
         var groupOf = new int[blocks.Count];
         for (int i = 0; i < groupOf.Length; i++) groupOf[i] = i;
         int Find(int i) { while (groupOf[i] != i) i = groupOf[i] = groupOf[groupOf[i]]; return i; }
-        // two blocks join when some of their locations come within a narrow strait of each other (bounding boxes)
-        float gap = Math.Max(6, md.Width * 0.0025f);
+        float gap = Math.Max(6, input.Width * 0.0025f);
         static float BoxGap(int ax0, int ay0, int ax1, int ay1, int bx0, int by0, int bx1, int by1)
             => Math.Max(Math.Max(0, Math.Max(ax0 - bx1, bx0 - ax1)), Math.Max(0, Math.Max(ay0 - by1, by0 - ay1)));
         var bbox = blocks.Select(b => (b.Locs.Min(l => l.MinX), b.Locs.Min(l => l.MinY), b.Locs.Max(l => l.MaxX), b.Locs.Max(l => l.MaxY))).ToArray();
-        foreach (var g in Enumerable.Range(0, blocks.Count).GroupBy(i => blocks[i].Owner))
+        foreach (var g in Enumerable.Range(0, blocks.Count).GroupBy(i => blocks[i].OwnerIndex))
         {
             var ids = g.ToList();
             for (int x = 0; x < ids.Count; x++)
@@ -99,26 +205,27 @@ public sealed class CountryLabels
         }
         for (int i = 0; i < groupOf.Length; i++) groupOf[i] = Find(i);
         var blockGroup = groupOf;
-        foreach (var g in Enumerable.Range(0, blocks.Count).GroupBy(i => blocks[i].Owner))
+        foreach (var g in Enumerable.Range(0, blocks.Count).GroupBy(i => blocks[i].OwnerIndex))
         {
-            var c = g.Key;
-            int homeBlock = c.Capital != null && c.Capital.Owner == c && block[c.Capital.Index] >= 0 ? block[c.Capital.Index] : g.OrderByDescending(i => blocks[i].Px).First();
+            if (!input.CountryByIndex.TryGetValue(g.Key, out var country)) continue;
+            int homeBlock = country.CapitalIndex >= 0 && country.CapitalIndex < n &&
+                input.Locations[country.CapitalIndex].OwnerIndex == country.Index && block[country.CapitalIndex] >= 0
+                ? block[country.CapitalIndex] : g.OrderByDescending(i => blocks[i].Px).First();
             int home = blockGroup[homeBlock];
-            // every group of the country that is not tiny gets its name (colonies and exclaves too)
             foreach (var grp in g.GroupBy(i => blockGroup[i]))
             {
                 var locs = grp.SelectMany(i => blocks[i].Locs).ToList();
                 long px = grp.Sum(i => blocks[i].Px);
                 bool wanted = grp.Key == home || (locs.Count >= 2 && px >= 400);
                 if (!wanted) continue;
-                var label = Fit(c, locs, grp.Key, block, blockGroup, md);
-                if (label != null) _labels.Add(label);
+                var label = Fit(country, locs, grp.Key, block, blockGroup, input);
+                if (label != null) labels.Add(label);
             }
         }
-        _dirty = false;
+        return labels.ToArray();
     }
 
-    private Label? Fit(Country c, List<Location> locs, int groupId, int[] block, int[] blockGroup, Burger.Core.Map.MapData md)
+    private static Label? Fit(CountryInput c, List<LocationInput> locs, int groupId, int[] block, int[] blockGroup, BuildInput md)
     {
         int minX = int.MaxValue, minY = int.MaxValue, maxX = 0, maxY = 0;
         foreach (var l in locs) { minX = Math.Min(minX, l.MinX); minY = Math.Min(minY, l.MinY); maxX = Math.Max(maxX, l.MaxX); maxY = Math.Max(maxY, l.MaxY); }
@@ -496,15 +603,7 @@ public sealed class CountryLabels
             float byLength = len / Math.Max(3, text.Length * 0.62f);
             float fontPx = Math.Max(1.5f, Math.Min(byThick, byLength));
             // terrain height under the line, smoothed so the name follows the land without wobbling
-            var raw = points.Select(p => _map.WorldPos(p.X, p.Y).Y).ToArray();
-            var heights = new float[np];
-            for (int i = 0; i < np; i++)
-            {
-                float sum = 0, wsum = 0;
-                for (int j = Math.Max(0, i - 6); j <= Math.Min(np - 1, i + 6); j++) { float wgt = 7 - Math.Abs(i - j); sum += raw[j] * wgt; wsum += wgt; }
-                heights[i] = sum / wsum + 0.02f;
-            }
-            return new Label { Country = c, Text = text, Points = points, FontPx = fontPx, Heights = heights, LengthPx = len, Coverage = (float)Math.Min(1, Math.Min(len, fontPx * (text.Length * 0.62f + 0.8f * (text.Length - 1))) / Math.Max(1, extent)) };
+            return new Label { Text = text, Points = points, FontPx = fontPx, LengthPx = len, Coverage = (float)Math.Min(1, Math.Min(len, fontPx * (text.Length * 0.62f + 0.8f * (text.Length - 1))) / Math.Max(1, extent)) };
         }
         }
     }
@@ -512,7 +611,7 @@ public sealed class CountryLabels
     // ------------------------------------------------------------------------------------- drawing
     public void Draw(Camera3D cam, float minScreenFont = 3f)
     {
-        if (_dirty && Raylib.GetTime() - _lastBuild > 1.5) { Rebuild(); _lastBuild = Raylib.GetTime(); }
+        RefreshLabels();
         float ppu = _game.World.Map.Settings.PixelsPerUnit;
         var font = Assets.HeaderFont;
         var scr = new Vector2[24];
@@ -524,7 +623,7 @@ public sealed class CountryLabels
             for (int i = 0; i < n; i++)
             {
                 var p = lb.Points[i];
-                scr[i] = Viewport.ToScreen(new Vector3(p.X / ppu, lb.Heights[i], p.Y / ppu), cam);
+                scr[i] = Viewport.SnapToScreen(new Vector3(p.X / ppu, lb.Heights[i], p.Y / ppu), cam);
                 minX = Math.Min(minX, scr[i].X); maxX = Math.Max(maxX, scr[i].X); minY = Math.Min(minY, scr[i].Y); maxY = Math.Max(maxY, scr[i].Y);
             }
             if (maxX < -100 || minX > Viewport.W + 100 || maxY < -100 || minY > Viewport.H + 100) continue;

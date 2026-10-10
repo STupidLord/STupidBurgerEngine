@@ -5,6 +5,7 @@ namespace Burger.Runtime;
 public sealed class AppOptions
 {
     public string GameRoot = "";
+    public string? LogDir;
     public string? Tag;
     public bool Observe;
     public string? LoadSave;
@@ -33,6 +34,7 @@ public static class Program
   --tag        skip the menu and play as TAG
   --observe    skip the menu and watch the AI
   --load       load a save file
+  --log-dir <folder>     write error.log and --perf output to this folder
   --screenshot <file.png> [--frames N] [--days D]   render, save a screenshot and quit (testing)";
 
     public static int Main(string[] args)
@@ -47,6 +49,7 @@ public static class Program
                 switch (a.ToLowerInvariant())
                 {
                     case "--game": opt.GameRoot = Next(); break;
+                    case "--log-dir": opt.LogDir = Path.GetFullPath(Next()); break;
                     case "--tag": opt.Tag = Next().ToUpperInvariant(); break;
                     case "--observe": opt.Observe = true; break;
                     case "--load": opt.LoadSave = Next(); break;

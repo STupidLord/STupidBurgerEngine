@@ -1,0 +1,16 @@
+# Example partial override for the SampleGame panel id "court".
+# Copy this file into a game's game/interface/ folder; sorted filenames load later.
+panel = {
+    id = court
+    override = yes
+    title = "Royal Council"
+    width = 460
+}
+
+# Extend the same panel without copying its existing element list.
+panel = {
+    id = court
+    extend = yes
+    header = "Mod-added section"
+    text = "This text was appended by a partial UI mod."
+}

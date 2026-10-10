@@ -23,6 +23,7 @@ Used in `trigger`, `potential`, `allow`, `limit` blocks. Logic: `AND`, `OR`, `NO
 - `has_combat_model`
 - `has_core_on`
 - `has_country_flag`
+- `has_feature`
 - `has_flag`
 - `has_global_flag`
 - `has_military_access`
@@ -67,6 +68,7 @@ Used in `trigger`, `potential`, `allow`, `limit` blocks. Logic: `AND`, `OR`, `NO
 - `owns_location`
 - `owns_state`
 - `random_chance`
+- `stronger_than`
 - `tag`
 - `terrain`
 

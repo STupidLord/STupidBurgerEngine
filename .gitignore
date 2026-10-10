@@ -7,4 +7,6 @@ projects/*/saves/
 projects/*/logs/
 _probe/
 _helper.bat
-merge.ps1
+burger.sh
+WBE.sh
+.pyc

@@ -647,6 +647,11 @@ Write them as `{ r g b }` or `{ r g b alpha }`. C# scripts can change the theme 
 `Game.Interface.Theme.SetColor("panel", 20, 24, 40, 240);` (fonts and textures: change the field, then call
 `Game.Interface.Theme.Changed()`). The sample's `interface/theme.txt` lists every value.
 
+The optional `layout` block can override the shared HUD container dimensions independently. Its keys are
+`top_bar_height` (default 46), `left_menu_width` (78), `left_panel_width` (390), and `right_panel_width` (420).
+Values are layout units from 20 to 1000; omitted values keep their current/default dimensions. Example:
+`theme = { layout = { left_panel_width = 430 } }`.
+
 **Interface layout.** Your own country's menus (military, recruit, characters, decisions and every `panel`) are in
 the left menu bar and open on the left, together with the location or country you clicked. World-wide overviews
 (wars, the list of countries) open from the top right. Map modes are in the bottom right.
@@ -675,3 +680,20 @@ defines with `Game.Data.Defines.Get("my_value", 1.0)`.
 `burger export <project> [--name MyGame]` (or option 4 in `BurgerEngine.bat`) validates the project, then builds
 a self-contained, single-file `MyGame.exe` (players do not need .NET installed). It copies `game/` next to it and
 adds a README for players. The EXE finds `game/` next to itself; saves and logs go into `saves/` and `logs/`.
+
+
+### Partial UI panel mods
+
+Custom `panel` definitions can now be patched without copying the whole definition. Use a stable `id` and exactly one operation:
+
+```text
+panel = { id = court override = yes title = "Royal Council" width = 460 }
+panel = { id = court extend = yes header = "Extra section" text = "Added by a mod" }
+panel = { id = court disable = yes }
+```
+
+`override = yes` changes only explicitly supplied panel properties (`title`/`name`, `button_text`, `hotkey`, `icon`, `potential`, `width`); existing elements remain unless the override declares replacement elements. `extend = yes` appends declared elements. `disable = yes` removes only a data-driven custom panel. All require an existing case-insensitive panel `id`; missing targets and conflicts log errors. Width must be an integer from 200 to 1000. Without an operation, duplicate IDs retain the old behavior: the later complete panel replaces the earlier one.
+
+Files load using the normal interface data convention: `interface.txt` first, then `interface/` files in case-insensitive filename order. Later definitions win. Theme properties/colors already merge field-by-field. Asset paths are relative to the `game/` folder; absent icons fall back to text initials, absent theme textures fall back to drawn UI, and fonts have engine/system fallback.
+
+This format covers themes, custom panels, and map modes; it does not yet redefine built-in HUD screen layouts, individual built-in widgets, or engine hotkeys. See [the runtime UI audit](UI_MODDING_AUDIT.md) for the complete screen/input map, current boundaries, examples, validation behavior, and verification status. The [partial override example](../examples/ui-partial-override/game/interface/10_court_patch.txt) targets SampleGame's `court` panel.

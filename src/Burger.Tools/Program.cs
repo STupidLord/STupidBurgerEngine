@@ -7,6 +7,8 @@ using Burger.Core.Model;
 using Burger.Core.Save;
 using Burger.Core.Script;
 using Burger.Core.Scripting;
+using Burger.Core.Data;
+using Burger.Core.Mechanics;
 
 namespace Burger.Tools;
 
@@ -380,6 +382,7 @@ public static class Program
                           $"{game.Data.Events.Count} events, {game.Mods.Scripts.Count} C# scripts");
         PrintLog();
         int loadErrors = Log.ErrorCount;
+        int expectedSelfTestErrors = 0;
 
         Console.WriteLine($"Simulating {days} days (all AI)...");
         game.StartNewGame(null);
@@ -421,6 +424,7 @@ public static class Program
         if (selftest)
         {
             PatchSelfTest(game);
+            expectedSelfTestErrors = InterfaceSelfTest();
             string tmp = Path.Combine(Path.GetTempPath(), "burger_selftest.sav");
             SaveGame.Save(game, tmp);
             var game2 = Game.Load(GameDir(project), compileScripts: true, seed: 1234);
@@ -455,15 +459,16 @@ public static class Program
             if (game.Features.Has(FeatureSet.Politics)) PoliticsFeatureTests(project);
             if (game.Features.Has(FeatureSet.Population)) PopulationFeatureTests(project);
         }
-        int simErrors = Log.ErrorCount - errorsBefore;
+        int simErrors = Log.ErrorCount - errorsBefore - expectedSelfTestErrors;
         if (simErrors > 0)
         {
             Console.WriteLine("Errors during simulation:");
             foreach (var e in Log.Entries.Where(e => e.Level == LogLevel.Error).TakeLast(simErrors)) Console.WriteLine("  " + e);
         }
-        if (Log.ErrorCount == 0) Ok($"OK - no errors ({Log.WarningCount} warnings)");
-        else Console.WriteLine($"{Log.ErrorCount} errors ({loadErrors} while loading), {Log.WarningCount} warnings");
-        return Log.ErrorCount == 0 && _failedChecks == 0 ? 0 : 1;
+        int unexpectedErrors = Log.ErrorCount - expectedSelfTestErrors;
+        if (unexpectedErrors == 0) Ok($"OK - no errors ({Log.WarningCount} warnings)");
+        else Console.WriteLine($"{unexpectedErrors} errors ({loadErrors} while loading), {Log.WarningCount} warnings");
+        return unexpectedErrors == 0 && _failedChecks == 0 ? 0 : 1;
     }
 
     private static int _failedChecks;
@@ -885,6 +890,61 @@ public static class Program
             var pn = ScriptParser.ParseQuiet(written, "s.txt").Get(st.Key);
             Check(written.Contains("# my comment") && written.Contains("# owner comment") && pn?.GetList("flags").Count == 1
                   && pn.GetList("locations").Count == st.Locations.Count && pn.GetString("owner") == st.Owner.Tag, "state writer keeps comments and extra keys");
+        }
+    }
+
+    private static int InterfaceSelfTest()
+    {
+        string root = Path.Combine(Path.GetTempPath(), "burger_ui_selftest_" + Guid.NewGuid().ToString("N"));
+        string vanilla = Path.Combine(root, "vanilla");
+        string modded = Path.Combine(root, "modded");
+        string disabled = Path.Combine(root, "disabled");
+        const string baseDef = "panel = { id = sample title = Base button_text = Open width = 420 hotkey = F7 icon = gfx/icon.png potential = { always = yes } text = Existing }\n";
+        void FileAt(string dir, string name, string content)
+        {
+            string path = Path.Combine(dir, "interface");
+            Directory.CreateDirectory(path);
+            File.WriteAllText(Path.Combine(path, name), content);
+        }
+        try
+        {
+            FileAt(vanilla, "00_base.txt", baseDef);
+            var baseUi = new InterfaceRegistry();
+            baseUi.Load(new GameData { Root = vanilla });
+            Check(baseUi.Panels.Count == 1 && baseUi.Panels[0].Title == "Base" && baseUi.Panels[0].Width == 420
+                  && baseUi.Theme.Layout["left_panel_width"] == 390,
+                "interface: vanilla definitions load unchanged without overrides");
+
+            FileAt(modded, "00_base.txt", baseDef);
+            FileAt(modded, "10_patch.txt", "panel = { id = SAMPLE override = yes title = Changed width = 510 }\n");
+            FileAt(modded, "20_extend.txt", "panel = { id = Sample extend = yes header = Added }\n");
+            FileAt(modded, "30_later.txt", "panel = { id = SAMPLE override = yes button_text = Later }\n");
+            FileAt(modded, "40_invalid.txt", "panel = { id = sample override = yes width = 9999 }\npanel = { id = missing override = yes title = Ignored }\npanel = { id = sample override = yes disable = yes }\n");
+            FileAt(modded, "50_theme.txt", "theme = { layout = { left_panel_width = 444 } }\n");
+            FileAt(modded, "60_invalid_theme.txt", "theme = { layout = { left_panel_width = 9999 } }\n");
+            int errorsBefore = Log.ErrorCount;
+            var patched = new InterfaceRegistry();
+            patched.Load(new GameData { Root = modded });
+            var p = patched.Panels.SingleOrDefault(x => x.Id == "sample");
+            Check(p != null && p.Title == "Changed" && p.Width == 510 && p.ButtonText == "Later"
+                  && p.Hotkey == "F7" && p.Icon == "gfx/icon.png" && p.Potential != null
+                  && p.Elements.Count == 2 && p.Elements[0].Text == "Existing" && p.Elements[1].Text == "Added",
+                "interface: case-insensitive property override, ordered precedence and extension preserve untouched values");
+            Check(patched.Theme.Layout["left_panel_width"] == 444 && patched.Theme.Layout["top_bar_height"] == 46,
+                "interface: theme layout metrics override per property while other defaults remain");
+            Check(Log.ErrorCount >= errorsBefore + 4 && p?.Width == 510 && patched.Theme.Layout["left_panel_width"] == 444,
+                "interface: invalid panel/theme values and missing targets report errors and preserve safe values");
+
+            FileAt(disabled, "00_base.txt", baseDef);
+            FileAt(disabled, "10_disable.txt", "panel = { id = sample disable = yes }\n");
+            var removed = new InterfaceRegistry();
+            removed.Load(new GameData { Root = disabled });
+            Check(removed.Panels.Count == 0, "interface: a data-driven panel can be disabled by stable id");
+            return Log.ErrorCount - errorsBefore;
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { }
         }
     }
 

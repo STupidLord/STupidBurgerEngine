@@ -16,7 +16,7 @@ public sealed partial class Hud
     private UiState Ui => _app.Ui;
 
     private float S => Gui.Scale;
-    private float TopH => 46 * S;
+    private float TopH => Gui.TopBarHeight * S;
 
     public Hud(App app) { _app = app; }
 
@@ -351,13 +351,19 @@ public sealed partial class Hud
         float rx = sw - 8 * S;
         var clock = G.Clock;
         string date = G.World.Date.ToDisplay(G.Clock.Speed <= 1);
-        float dw = Math.Max(190 * S, Gui.Measure(date, 18, FontKind.Bold).X + 20 * S);
+        float dateTextW = Gui.Measure(date, 15, FontKind.Bold).X;
+        float dw = Math.Max(210 * S, dateTextW + 66 * S);
         rx -= dw;
         var dateR = new Rectangle(rx, 6 * S, dw, 34 * S);
         Gui.ButtonFrame(dateR, true, Gui.Hover(dateR), false);
         if (clock.Paused) Gui.Gradient(new Rectangle(dateR.X + 1, dateR.Y + 1, dateR.Width - 2, dateR.Height - 2), new Color(150, 52, 40, 255), new Color(90, 26, 20, 255));
-        Gui.LabelCentered(clock.Paused ? "PAUSED" : date, dateR, 18, clock.Paused ? Color.White : Gui.Text, FontKind.Bold);
-        if (Gui.Hover(dateR)) Gui.Tooltip($"{date}\nSpace: pause/unpause, 1-5: speed\nRunning at {clock.ActualDaysPerSecond:0.#} days per second");
+        Gui.Label(Gui.Fit(date, dateR.Width - 58 * S, 15, FontKind.Bold), dateR.X + 8 * S, dateR.Y + 9 * S, 15, Color.White, FontKind.Bold);
+        var stateR = new Rectangle(dateR.X + dateR.Width - 48 * S, dateR.Y + 8 * S, 42 * S, 18 * S);
+        var stateColor = clock.Paused ? Gui.Bad : Gui.Good;
+        Gui.Gradient(stateR, Gui.Lighter(stateColor, 0.12f), Gui.Darker(stateColor, 0.28f));
+        Raylib.DrawRectangleLinesEx(stateR, 1, new Color(0, 0, 0, 180));
+        Gui.LabelCentered(clock.Paused ? "PAUSE" : "LIVE", stateR, 10, Color.White, FontKind.Bold);
+        if (Gui.Hover(dateR)) Gui.Tooltip($"{date}\n{(clock.Paused ? "Paused" : $"Running at {clock.ActualDaysPerSecond:0.#} days per second")}\nSpace: pause/unpause; 1-5: speed; + / -: adjust speed\nWheel: zoom; middle-drag / WASD: pan");
         Gui.Block(dateR);
         if (Gui.Clicked(dateR)) clock.Paused = !clock.Paused;
         rx -= 5 * 18 * S + 10 * S;
@@ -450,16 +456,29 @@ public sealed partial class Hud
         float x = r.X + pad, y = r.Y + 5 * S, h = r.Height - 10 * S;
         foreach (var (name, mode) in modes)
         {
-            if (Gui.Button(new Rectangle(x, y, bw, h), name, true, $"{name} map mode (Tab cycles)", Map.CustomMode == null && Map.Mode == mode, 14))
+            if (Gui.Button(new Rectangle(x, y, bw, h), name, true, MapModeHelp(mode), Map.CustomMode == null && Map.Mode == mode, 14))
             { Map.Mode = mode; Map.CustomMode = null; Map.Dirty = true; }
             x += bw + gap;
         }
         foreach (var m in custom)
         {
-            if (Gui.Button(new Rectangle(x, y, bw, h), m.Name, true, $"Map mode: {m.Name}", Map.CustomMode == m, 14)) { Map.CustomMode = m; Map.Dirty = true; }
+            string legend = $"{m.Name}: values {m.Min:0.##} to {m.Max:0.##}\nLow color: RGB {m.LowColor.R}, {m.LowColor.G}, {m.LowColor.B}\nHigh color: RGB {m.HighColor.R}, {m.HighColor.G}, {m.HighColor.B}";
+            if (Gui.Button(new Rectangle(x, y, bw, h), m.Name, true, legend, Map.CustomMode == m, 14)) { Map.CustomMode = m; Map.Dirty = true; }
             x += bw + gap;
         }
     }
+
+    private string MapModeHelp(MapMode mode) => mode switch
+    {
+        MapMode.Political => "Political: territory color shows its country; stripes mark occupied provinces. Tab cycles modes.",
+        MapMode.Terrain => "Terrain: terrain textures and relief; province colors are hidden. Tab cycles modes.",
+        MapMode.States => "States: each state gets a distinct color; dark lines show province boundaries. Tab cycles modes.",
+        MapMode.Diplomacy => "Diplomacy: shows relations to the focused country; hover a province for details. Tab cycles modes.",
+        MapMode.Locations => "Locations: each province uses its configured map color. Tab cycles modes.",
+        MapMode.Supply => "Supply: low/unsupplied areas trend red or dark; stronger supply trends green. Tab cycles modes.",
+        MapMode.Air => "Air: color distinguishes air regions; red-to-green indicates contested air superiority. Tab cycles modes.",
+        _ => $"{mode} map mode. Tab cycles modes."
+    };
 
     // ===============================================================================================
     // Notifications & status

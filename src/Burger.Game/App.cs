@@ -27,6 +27,7 @@ public sealed class App
     private bool _quit;
     private int _frame;
     private Action? _pending;
+    private RenderPerf? _renderPerf;
 
     public App(AppOptions options) { _opt = options; }
 
@@ -46,10 +47,12 @@ public sealed class App
         Raylib.SetExitKey(KeyboardKey.Null);
         Raylib.SetTargetFPS(120);
         Assets.Font = Raylib.GetFontDefault();
+        if (_opt.Perf) _renderPerf = new RenderPerf();
 
         LoadGame();
         if (Game != null && _opt.LoadSave != null) DoLoadSave(_opt.LoadSave);
         else if (Game != null && (_opt.Tag != null || _opt.Observe)) StartGame(_opt.Observe ? null : _opt.Tag);
+        _perfDay = Game?.World.Date.TotalDays ?? 0;
 
         while (!_quit && !Raylib.WindowShouldClose())
         {
@@ -91,7 +94,7 @@ public sealed class App
         _perfTime += Raylib.GetFrameTime();
         _perfFrames++;
         _perfSim += Game?.Clock.LastUpdateMs ?? 0;
-        if (_perfTime < 3) return;
+        if (_perfTime < 10) return;
         int day = Game?.World.Date.TotalDays ?? 0;
         Log.Info($"PERF fps {_perfFrames / _perfTime:0.0}, frame {_perfTime * 1000 / _perfFrames:0.0} ms, simulation {_perfSim / _perfFrames:0.0} ms/frame, {(day - _perfDay) / _perfTime:0.0} days/s");
         if (Game != null)
@@ -105,6 +108,7 @@ public sealed class App
         }
         _perfDay = day;
         _perfTime = _perfFrames = _perfSim = 0;
+        _renderPerf?.Clear();
     }
 
     public void RequestQuit() => _quit = true;
@@ -131,7 +135,9 @@ public sealed class App
         Game = null;
         Ui = new UiState();
         Log.Clear();
-        Log.SetLogFile(Path.Combine(LogsDir, "error.log"));
+        // Launchers run from the repository root, making this a predictable shared
+        // location for engine diagnostics and --perf output. --log-dir overrides it.
+        Log.SetLogFile(Path.Combine(_opt.LogDir ?? Path.Combine(Directory.GetCurrentDirectory(), "logs"), "error.log"));
         try
         {
             var game = Burger.Core.Game.Load(_gameRoot, compileScripts: true);
@@ -332,24 +338,36 @@ public sealed class App
         var game = Game!;
         var map = Renderer!;
         var cam = Camera!;
+        _renderPerf?.Begin();
         _hud!.HandleKeys();
+        // camera input + damped movement are resolved here, before BeginDrawing - never inside the draw loop
         cam.Update(dt, Gui.MouseOverUi, false, !_hud.KeyboardCaptured);
         var hovered = Gui.MouseOverUi ? null : map.Pick(Gui.Mouse, cam.Camera);
         if (hovered != map.Hovered) { map.Hovered = hovered; map.Dirty = true; }
+        _renderPerf?.Mark(1);
 
         Raylib.BeginDrawing();
         DrawWorld(cam.Camera);
+        _renderPerf?.Mark(2);
         Overlay!.DrawLabels(cam.Camera);
+        _renderPerf?.Mark(3);
         Overlay.DrawOrders(cam.Camera, Ui);
+        _renderPerf?.Mark(4);
         Overlay.DrawUnits(cam.Camera, Ui, Gui.MouseOverUi);
+        _renderPerf?.Mark(5);
         Overlay.DrawFleets(cam.Camera, Ui, Gui.MouseOverUi);
+        _renderPerf?.Mark(6);
         if (Overlay.DrawAirBases(cam.Camera, Gui.MouseOverUi)) Ui.Left = LeftPanel.Air;
+        _renderPerf?.Mark(7);
         HandleMapLeftMouse(hovered);
         if (!Gui.MouseOverUi && Raylib.IsMouseButtonPressed(MouseButton.Right)) _hud.OnMapRightClick(hovered);
         if (hovered != null && !Gui.MouseOverUi) DrawHoverInfo(hovered);
+        _renderPerf?.Mark(8);
         _hud.Draw();
         Gui.EndFrame();
+        _renderPerf?.Mark(9);
         Raylib.EndDrawing();
+        _renderPerf?.End(Raylib.GetFrameTime() * 1000.0);
 
         try
         {
@@ -520,7 +538,8 @@ public sealed class App
         y += 26 * s;
         var playable = game.World.Countries.Where(c => c.Playable && c.Exists).OrderBy(c => c.Name).ToList();
         float listH = panel.Y + panel.Height - y - 250 * s;
-        float top = Gui.BeginScroll("menu-countries", new Rectangle(x, y, w, listH), playable.Count * 40 * s);
+        var countryList = new Rectangle(x, y, w, Math.Max(40 * s, listH));
+        float top = Gui.BeginScroll("menu-countries", countryList, playable.Count * 40 * s);
         float cy = top;
         foreach (var c in playable)
         {
@@ -529,7 +548,9 @@ public sealed class App
             Gui.ButtonFrame(row, true, Gui.Hover(row), sel);
             Gui.Flag(c, new Rectangle(row.X + 4, row.Y + 4, 42 * s, 28 * s));
             Gui.Label(c.Name, row.X + 54 * s, row.Y + 8 * s, 17, sel ? Color.White : Gui.Text, FontKind.Bold);
-            if (Gui.Clicked(row))
+            // Scissor mode clips drawing, not mouse hit testing. Ignore rows
+            // outside the visible list so they cannot steal Play/Quit clicks.
+            if (Raylib.CheckCollisionRecs(row, countryList) && Gui.Clicked(row))
             {
                 _menuSelection = c;
                 if (c.Capital != null) cam.LookAt(map.LocationPos(c.Capital));
