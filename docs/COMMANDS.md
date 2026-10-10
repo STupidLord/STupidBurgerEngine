@@ -143,6 +143,14 @@ git diff main...HEAD
 
 The automation rejects merge commits and restores the original branch if it cannot apply the patch automatically.
 
+To validate, commit, rebase onto `origin/main`, and push directly to the remote `main` branch, run this from a change branch:
+
+```bash
+tools/check-rebase-push-main.sh "Describe the change"
+```
+
+The script runs `./burger.sh validate SampleGame --days 60`, displays the pending changes, asks for confirmation before staging and rebasing, asks again before pushing, and refuses to run from `main`. Override the validation command when needed with `CHECK_CMD='...' tools/check-rebase-push-main.sh "message"`. It uses `git add -A`, so all tracked and untracked changes are included; inspect the displayed status carefully.
+
 ## Output locations
 
 - Logs: `logs/`, or the directory passed to `--log-dir`
