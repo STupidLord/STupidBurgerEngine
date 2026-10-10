@@ -16,7 +16,7 @@ public sealed partial class Hud
     private UiState Ui => _app.Ui;
 
     private float S => Gui.Scale;
-    private float TopH => 46 * S;
+    private float TopH => Gui.TopBarHeight * S;
 
     public Hud(App app) { _app = app; }
 

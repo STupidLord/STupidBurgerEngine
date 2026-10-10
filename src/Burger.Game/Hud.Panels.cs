@@ -11,7 +11,7 @@ public sealed partial class Hud
     private Rectangle LeftRect(float height)
     {
         float x = (G.World.Player != null && !Ui.EditorActive ? LeftMenuW + 10 * S : 8 * S);
-        return new(x, TopH + 8 * S, 390 * S, Math.Min(height, Raylib.GetScreenHeight() - TopH - 20 * S));
+        return new(x, TopH + 8 * S, Gui.LeftPanelWidth * S, Math.Min(height, Raylib.GetScreenHeight() - TopH - 20 * S));
     }
 
     private string CountryLink(Country? c) => c?.Name ?? "-";

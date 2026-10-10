@@ -75,6 +75,14 @@ public sealed class ThemeDef
     /// <summary>Colors by name: panel, panel_border, panel_inner_border, panel_header, top_bar, text, text_dim, title, good, bad,
     /// button, button_hover, button_selected, button_disabled, button_border, tooltip, menu_bar.</summary>
     public readonly Dictionary<string, ThemeColor> Colors = new(StringComparer.OrdinalIgnoreCase);
+    /// <summary>Shared HUD dimensions in layout units. Omitted values keep the engine's current defaults.</summary>
+    public readonly Dictionary<string, float> Layout = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["top_bar_height"] = 46,
+        ["left_menu_width"] = 78,
+        ["left_panel_width"] = 390,
+        ["right_panel_width"] = 420,
+    };
     /// <summary>Increases on every change so the interface knows to reload.</summary>
     public int Version { get; private set; }
 
@@ -92,6 +100,8 @@ public sealed class ThemeDef
         "panel", "panel_border", "panel_inner_border", "panel_header", "top_bar", "text", "text_dim", "title", "good", "bad",
         "button", "button_hover", "button_selected", "button_disabled", "button_border", "tooltip", "menu_bar",
     };
+
+    public static readonly string[] KnownLayout = { "top_bar_height", "left_menu_width", "left_panel_width", "right_panel_width" };
 
     internal void Load(Node n)
     {
@@ -118,6 +128,22 @@ public sealed class ThemeDef
                     SetColor(c.Key, rgb.R, rgb.G, rgb.B, a);
                 }
                 else Log.Error($"Theme color '{c.Key}' needs a color like {{ 30 30 40 }} or {{ 30 30 40 230 }}", c.Location);
+            }
+        if (n.Get("layout") is { } layout)
+            foreach (var metric in layout.All)
+            {
+                if (!KnownLayout.Contains(metric.Key, StringComparer.OrdinalIgnoreCase))
+                {
+                    Log.Error($"Unknown interface layout metric '{metric.Key}' (known: {string.Join(", ", KnownLayout)})", metric.Location);
+                    continue;
+                }
+                if (metric.Value == null || !Node.TryParseDouble(metric.Value, out double value) || double.IsNaN(value) ||
+                    double.IsInfinity(value) || value < 20 || value > 1000)
+                {
+                    Log.Error($"Interface layout metric '{metric.Key}' must be a number from 20 to 1000; keeping its previous value", metric.Location);
+                    continue;
+                }
+                Layout[metric.Key] = (float)value;
             }
         Version++;
     }
@@ -164,7 +190,7 @@ public sealed class InterfaceRegistry
 
     public void AddPanel(PanelDef p)
     {
-        Panels.RemoveAll(x => x.Id == p.Id);
+        Panels.RemoveAll(x => x.Id.Equals(p.Id, StringComparison.OrdinalIgnoreCase));
         Panels.Add(p);
     }
 
@@ -182,12 +208,91 @@ public sealed class InterfaceRegistry
                 if (n.Children == null) continue;
                 switch (n.Key.ToLowerInvariant())
                 {
-                    case "panel": AddPanel(ParsePanel(n)); break;
+                    case "panel": LoadPanel(n); break;
                     case "map_mode": AddMapMode(ParseMapMode(n)); break;
                     case "theme": Theme.Load(n); break;
                     default: Log.Error($"Unknown interface entry '{n.Key}' (use panel, map_mode or theme)", n.Location); break;
                 }
             }
+    }
+
+    private void LoadPanel(Node n)
+    {
+        string? id = n.GetString("id");
+        if (string.IsNullOrWhiteSpace(id))
+        {
+            if (n.GetBool("override") || n.GetBool("extend") || n.GetBool("disable"))
+            {
+                Log.Error("A panel override, extension or disable needs a stable id", n.Location);
+                return;
+            }
+            Log.Warn("Panel has no id; using a line-based id is fragile when files change", n.Location);
+        }
+        id ??= "panel_" + n.Line;
+
+        bool isOverride = n.GetBool("override");
+        bool isExtension = n.GetBool("extend");
+        bool isDisabled = n.GetBool("disable");
+        if ((isOverride ? 1 : 0) + (isExtension ? 1 : 0) + (isDisabled ? 1 : 0) > 1)
+        {
+            Log.Error("Panel options 'override', 'extend' and 'disable' are mutually exclusive", n.Location);
+            return;
+        }
+
+        int existingIndex = Panels.FindIndex(p => p.Id.Equals(id, StringComparison.OrdinalIgnoreCase));
+        if (isDisabled)
+        {
+            if (existingIndex < 0) Log.Warn($"Cannot disable unknown panel '{id}'", n.Location);
+            else Panels.RemoveAt(existingIndex);
+            return;
+        }
+
+        if (isOverride || isExtension)
+        {
+            if (existingIndex < 0)
+            {
+                Log.Error($"Cannot {(isOverride ? "override" : "extend")} unknown panel '{id}'", n.Location);
+                return;
+            }
+            PatchPanel(Panels[existingIndex], n, isExtension);
+            return;
+        }
+
+        // Backwards compatibility: a repeated panel id without an explicit operation replaces the earlier definition.
+        AddPanel(ParsePanel(n));
+    }
+
+    private static void PatchPanel(PanelDef target, Node n, bool extend)
+    {
+        if (n.Has("title") || n.Has("name")) target.Title = n.GetString("title") ?? n.GetString("name") ?? target.Title;
+        if (n.Has("button_text")) target.ButtonText = n.GetString("button_text") ?? target.ButtonText;
+        if (n.Has("hotkey")) target.Hotkey = n.GetString("hotkey");
+        if (n.Has("icon")) target.Icon = n.GetString("icon");
+        if (n.Has("potential")) target.Potential = n.Get("potential");
+        if (n.Has("width"))
+        {
+            if (TryPanelWidth(n.Get("width"), out int width)) target.Width = width;
+            else Log.Error("Panel width must be a whole number from 200 to 1000; keeping the previous width", n.Get("width")!.Location);
+        }
+
+        var elementKeys = new HashSet<string>(PanelKeys, StringComparer.OrdinalIgnoreCase);
+        bool hasElements = n.All.Any(c => !elementKeys.Contains(c.Key));
+        if (!hasElements) return;
+        int errorsBefore = Log.ErrorCount;
+        var elements = ParseElements(n);
+        if (Log.ErrorCount > errorsBefore) return;
+        if (extend) target.Elements.AddRange(elements);
+        else target.Elements = elements;
+    }
+
+    private static bool TryPanelWidth(Node? node, out int width)
+    {
+        width = 420;
+        if (node?.Value == null || !Node.TryParseDouble(node.Value, out double value) ||
+            double.IsNaN(value) || double.IsInfinity(value) || value < 200 || value > 1000 || Math.Abs(value - Math.Round(value)) > 0.001)
+            return false;
+        width = (int)Math.Round(value);
+        return true;
     }
 
     private static PanelDef ParsePanel(Node n)
@@ -197,7 +302,7 @@ public sealed class InterfaceRegistry
             Id = n.GetString("id") ?? "panel_" + n.Line,
             Title = n.GetString("title") ?? n.GetString("name") ?? "Panel",
             Hotkey = n.GetString("hotkey"),
-            Width = n.GetInt("width", 420),
+            Width = ReadPanelWidth(n),
             Icon = n.GetString("icon"),
             Potential = n.Get("potential"),
         };
@@ -206,8 +311,16 @@ public sealed class InterfaceRegistry
         return p;
     }
 
+    private static int ReadPanelWidth(Node n)
+    {
+        if (!n.Has("width")) return 420;
+        if (TryPanelWidth(n.Get("width"), out int width)) return width;
+        Log.Error("Panel width must be a whole number from 200 to 1000; using 420", n.Get("width")!.Location);
+        return 420;
+    }
+
     private static readonly HashSet<string> PanelKeys = new(StringComparer.OrdinalIgnoreCase)
-        { "id", "title", "name", "hotkey", "width", "icon", "potential", "button_text", "iterator", "limit", "max_rows" };
+        { "id", "title", "name", "hotkey", "width", "icon", "potential", "button_text", "override", "extend", "disable", "iterator", "limit", "max_rows" };
 
     private static List<PanelElement> ParseElements(Node block)
     {

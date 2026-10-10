@@ -10,6 +10,8 @@ theme = {
 	font_scale = 1.0
 	ui_scale = 1.0
 	ornate = yes                                   # gradients, double borders and corner studs; no = flat panels
+	# Optional shared HUD dimensions in layout units (each property is independently overridable):
+	# layout = { top_bar_height = 46 left_menu_width = 78 left_panel_width = 390 right_panel_width = 420 }
 	# panel_texture = "gfx/interface/panel.png"
 	# button_texture = "gfx/interface/button.png"
 	# texture_border = 12

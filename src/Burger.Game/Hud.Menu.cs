@@ -12,7 +12,7 @@ public sealed partial class Hud
 {
     private enum MenuIcon { Military, Recruit, Characters, Decisions, Production, Designer, Navy, Air, Politics }
 
-    private float LeftMenuW => 78 * S;
+    private float LeftMenuW => Gui.LeftMenuWidth * S;
 
     /// <summary>Card background for list rows inside panels.</summary>
     private void Card(Rectangle r, Color bg, bool highlight = false)

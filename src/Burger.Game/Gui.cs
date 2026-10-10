@@ -17,6 +17,7 @@ public static class Gui
     public static Color PanelBg, PanelBorder, PanelInner, PanelHeader, TopBar, Text, TextDim, Gold, Good, Bad;
     public static Color ButtonBg, ButtonHover, ButtonDisabled, ButtonBorder, Accent, TooltipBg, MenuBar;
     public static bool Ornate = true;
+    public static float TopBarHeight = 46, LeftMenuWidth = 78, LeftPanelWidth = 390, RightPanelWidth = 420;
     private static Texture2D? _panelTex, _buttonTex, _topBarTex;
     private static int _texBorder = 12;
     private static float _fontScale = 1f;
@@ -59,6 +60,10 @@ public static class Gui
         TooltipBg = new(16, 16, 20, 248);
         MenuBar = new(22, 22, 26, 236);
         Ornate = true;
+        TopBarHeight = 46;
+        LeftMenuWidth = 78;
+        LeftPanelWidth = 390;
+        RightPanelWidth = 420;
         _fontScale = 1f;
         _uiScale = 1f;
     }
@@ -87,6 +92,10 @@ public static class Gui
         TooltipBg = Get("tooltip", TooltipBg);
         MenuBar = Get("menu_bar", MenuBar);
         Ornate = theme.Ornate;
+        TopBarHeight = theme.Layout.GetValueOrDefault("top_bar_height", 46);
+        LeftMenuWidth = theme.Layout.GetValueOrDefault("left_menu_width", 78);
+        LeftPanelWidth = theme.Layout.GetValueOrDefault("left_panel_width", 390);
+        RightPanelWidth = theme.Layout.GetValueOrDefault("right_panel_width", 420);
         _fontScale = theme.FontScale;
         _uiScale = theme.UiScale;
         _texBorder = Math.Max(1, theme.TextureBorder);

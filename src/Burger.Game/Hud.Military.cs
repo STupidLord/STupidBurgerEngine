@@ -8,7 +8,7 @@ public sealed partial class Hud
 {
     private Rectangle RightRect(float height)
     {
-        float w = 420 * S;
+        float w = Gui.RightPanelWidth * S;
         return new Rectangle(Raylib.GetScreenWidth() - w - 8 * S, TopH + 8 * S, w, Math.Min(height, Raylib.GetScreenHeight() - TopH - 170 * S));
     }
 
