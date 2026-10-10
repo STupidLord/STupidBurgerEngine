@@ -1,5 +1,5 @@
-BurgerEngine log - 10/9/2026 9:47:15 PM
-[21:47:16] INFO: Loaded 11 C# script(s) (including the backend)
-[21:47:16] INFO: Province map 6144x3456
-[21:47:17] INFO: Map loaded: 6426 locations, 19086 borders
-[21:47:17] INFO: Game 'Earth1930' loaded in 2700 ms
+BurgerEngine log - 10/10/2026 3:53:55 AM
+[03:53:56] INFO: Loaded 12 C# script(s) (including the backend)
+[03:53:56] INFO: Province map 6144x3456
+[03:53:57] INFO: Map loaded: 6426 locations, 19086 borders
+[03:53:57] INFO: Game 'Earth1930' loaded in 2760 ms
